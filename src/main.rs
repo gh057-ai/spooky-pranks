@@ -10,7 +10,7 @@ fn main() {
             }),
             ..default()
         }))
-        .insert_resource(ClearColor(Color::rgb(0.1, 0.1, 0.15))) // Dark background
+        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15))) // Dark background
         .add_systems(Startup, setup)
         .add_systems(Update, (
             follow_mouse,
@@ -30,7 +30,7 @@ struct Ghost;
 
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    _asset_server: Res<AssetServer>,
 ) {
     // Camera
     commands.spawn(Camera2dBundle::default());
@@ -39,7 +39,7 @@ fn setup(
     commands.spawn((
         SpriteBundle {
             sprite: Sprite {
-                color: Color::rgba(0.8, 0.8, 0.8, 0.8),
+                color: Color::srgba(0.8, 0.8, 0.8, 0.8),
                 custom_size: Some(Vec2::new(30.0, 30.0)),
                 ..default()
             },
