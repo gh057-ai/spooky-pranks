@@ -4,6 +4,8 @@ use bevy::{
     app::AppExit,
     input::keyboard::KeyCode,
 };
+use std::fs;
+use serde::{Serialize, Deserialize};
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 enum GameSet {
@@ -39,6 +41,9 @@ fn main() {
                 float_ghost.in_set(GameSet::FloatGhost),
                 fade_ghost.in_set(GameSet::FadeGhost),
                 exit_system.in_set(GameSet::ExitSystem),
+                update_house_display,
+                save_game,
+                load_game,
             ),
         )
         .init_resource::<CursorPosition>()
@@ -102,8 +107,23 @@ fn ease_out_cubic(x: f32) -> f32 {
     1.0 - (1.0 - x).powi(3)
 }
 
+#[derive(Component, Clone, Copy)]
+enum HouseState {
+    Lit,
+    Dark,
+}
+
+#[derive(Component)]
+enum HouseType {
+    First,
+    Second,
+    Third,
+}
+
 #[derive(Component)]
 struct House {
+    state: HouseState,
+    house_type: HouseType,
     light_status: bool,
     loot_type: LootType,
     interaction_timer: Timer,
@@ -116,17 +136,23 @@ struct Collectable {
     value: u32,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Serialize, Deserialize)]
 struct PlayerInventory {
     candies: u32,
     rare_items: Vec<LootType>,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 enum LootType {
     Candy,
-    RareItem(String), // e.g., "Ancient Spellbook", "Magic Crystal"
-    SpecialTreat(String), // e.g., "Homemade Cookies", "Golden Chocolate"
+    RareItem(String),
+    SpecialTreat(String),
+}
+
+#[derive(Resource)]
+struct HouseSprites {
+    lit: Handle<Image>,
+    dark: Handle<Image>,
 }
 
 fn setup(
@@ -134,6 +160,13 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     commands.spawn(Camera2dBundle::default());
+
+    // Update paths to match directory structure
+    let house_sprites = HouseSprites {
+        lit: asset_server.load("sprites/houses/house_lit.png"),
+        dark: asset_server.load("sprites/houses/house_dark.png"),
+    };
+    commands.insert_resource(house_sprites);
 
     commands.spawn((
         SpriteBundle {
@@ -322,14 +355,20 @@ fn spawn_houses(
         commands.spawn((
             SpriteBundle {
                 texture: asset_server.load(if light_status { 
-                    "sprites/house_lit.png" 
+                    "sprites/houses/house_lit.png" 
                 } else { 
-                    "sprites/house_dark.png" 
+                    "sprites/houses/house_dark.png" 
                 }),
                 transform: Transform::from_xyz(pos.x, pos.y, 0.0),
                 ..default()
             },
             House {
+                state: if light_status { HouseState::Lit } else { HouseState::Dark },
+                house_type: match rand::random::<f32>() {
+                    x if x < 0.2 => HouseType::First,
+                    x if x < 0.3 => HouseType::Second,
+                    _ => HouseType::Third,
+                },
                 light_status,
                 loot_type: match rand::random::<f32>() {
                     x if x < 0.2 => LootType::RareItem("Magic Crystal".to_string()),
@@ -441,6 +480,44 @@ fn animate_floating_text(
 
         if floating.timer.finished() {
             commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn update_house_display(
+    mut house_query: Query<(&House, &mut Handle<Image>)>,
+    house_sprites: Res<HouseSprites>,
+) {
+    for (house, mut sprite) in house_query.iter_mut() {
+        let new_sprite = match (house.state, &house.house_type) {
+            (HouseState::Lit, _) => house_sprites.lit.clone(),
+            (HouseState::Dark, _) => house_sprites.dark.clone(),
+        };
+        *sprite = new_sprite;
+    }
+}
+
+fn save_game(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    inventory: Res<PlayerInventory>,
+) {
+    if keyboard.just_pressed(KeyCode::F5) {  // Save when F5 is pressed
+        let save_data = serde_json::to_string(&*inventory).unwrap();
+        fs::write("save_game.json", save_data).unwrap();
+        println!("Game saved!");
+    }
+}
+
+fn load_game(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut inventory: ResMut<PlayerInventory>,
+) {
+    if keyboard.just_pressed(KeyCode::F9) {  // Load when F9 is pressed
+        if let Ok(save_data) = fs::read_to_string("save_game.json") {
+            if let Ok(loaded_inventory) = serde_json::from_str::<PlayerInventory>(&save_data) {
+                *inventory = loaded_inventory;
+                println!("Game loaded!");
+            }
         }
     }
 }
