@@ -15,6 +15,7 @@ fn main() {
         .add_systems(Update, (
             follow_mouse,
             cursor_position_system,
+            float_ghost,
         ))
         .init_resource::<CursorPosition>()
         .run();
@@ -26,27 +27,38 @@ struct CursorPosition {
 }
 
 #[derive(Component)]
-struct Ghost;
+struct Ghost {
+    speed: f32,
+}
+
+#[derive(Component)]
+struct FloatingAnimation {
+    original_y: f32,
+}
 
 fn setup(
     mut commands: Commands,
-    _asset_server: Res<AssetServer>,
+    asset_server: Res<AssetServer>,
 ) {
     // Camera
     commands.spawn(Camera2dBundle::default());
 
-    // Ghost (temporarily using a sprite shape until we have assets)
+    // Ghost with actual sprite
     commands.spawn((
         SpriteBundle {
+            texture: asset_server.load("sprites/ghost.png"),
+            transform: Transform::from_xyz(0.0, 0.0, 1.0)
+                .with_scale(Vec3::splat(0.2)), // Changes size of ghost from 2.0 to 0.2
             sprite: Sprite {
-                color: Color::srgba(0.8, 0.8, 0.8, 0.8),
-                custom_size: Some(Vec2::new(30.0, 30.0)),
+                color: Color::srgba(1.0, 1.0, 1.0, 0.8), // Slightly transparent
                 ..default()
             },
-            transform: Transform::from_xyz(0.0, 0.0, 1.0),
             ..default()
         },
-        Ghost,
+        Ghost { speed: 10.0 },
+        FloatingAnimation {
+            original_y: 0.0,
+        },
     ));
 }
 
@@ -68,15 +80,25 @@ fn cursor_position_system(
 
 fn follow_mouse(
     cursor_position: Res<CursorPosition>,
-    mut ghost_query: Query<&mut Transform, With<Ghost>>,
+    mut ghost_query: Query<(&Ghost, &mut Transform, &mut FloatingAnimation)>,
     time: Res<Time>,
 ) {
-    if let Ok(mut ghost_transform) = ghost_query.get_single_mut() {
+    if let Ok((ghost, mut ghost_transform, mut anim)) = ghost_query.get_single_mut() {
         let target = cursor_position.position.extend(ghost_transform.translation.z);
         let current = ghost_transform.translation;
         
-        // Smooth following
-        let new_pos = current.lerp(target, time.delta_seconds() * 10.0);
+        let new_pos = current.lerp(target, time.delta_seconds() * ghost.speed);
         ghost_transform.translation = new_pos;
+        anim.original_y = new_pos.y;
+    }
+}
+
+fn float_ghost(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &FloatingAnimation)>,
+) {
+    for (mut transform, anim) in query.iter_mut() {
+        let offset = (time.elapsed_seconds() * 2.0).sin() * 10.0;
+        transform.translation.y = anim.original_y + offset;
     }
 }
