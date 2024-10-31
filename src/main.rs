@@ -1,4 +1,18 @@
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{
+    prelude::*,
+    window::PrimaryWindow,
+    app::AppExit,
+    input::keyboard::KeyCode,
+};
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+enum GameSet {
+    FollowMouse,
+    CursorPositionSystem,
+    FloatGhost,
+    FadeGhost,
+    ExitSystem,
+}
 
 fn main() {
     App::new()
@@ -12,11 +26,16 @@ fn main() {
         }))
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15))) // Dark background
         .add_systems(Startup, setup)
-        .add_systems(Update, (
-            follow_mouse,
-            cursor_position_system,
-            float_ghost,
-        ))
+        .add_systems(
+            Update,
+            (
+                cursor_position_system.in_set(GameSet::CursorPositionSystem),
+                follow_mouse.in_set(GameSet::FollowMouse),
+                float_ghost.in_set(GameSet::FloatGhost),
+                fade_ghost.in_set(GameSet::FadeGhost),
+                exit_system.in_set(GameSet::ExitSystem),
+            ),
+        )
         .init_resource::<CursorPosition>()
         .run();
 }
@@ -36,28 +55,34 @@ struct FloatingAnimation {
     original_y: f32,
 }
 
+#[derive(Component)]
+struct FadeEffect {
+    timer: Timer,
+    is_faded: bool,
+}
+
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    // Camera
     commands.spawn(Camera2dBundle::default());
 
-    // Ghost with actual sprite
     commands.spawn((
         SpriteBundle {
             texture: asset_server.load("sprites/ghost.png"),
             transform: Transform::from_xyz(0.0, 0.0, 1.0)
-                .with_scale(Vec3::splat(0.2)), // Changes size of ghost from 2.0 to 0.2
+                .with_scale(Vec3::splat(0.2)),
             sprite: Sprite {
-                color: Color::srgba(1.0, 1.0, 1.0, 0.8), // Slightly transparent
+                color: Color::WHITE,
                 ..default()
             },
             ..default()
         },
         Ghost { speed: 10.0 },
-        FloatingAnimation {
-            original_y: 0.0,
+        FloatingAnimation { original_y: 0.0 },
+        FadeEffect {
+            timer: Timer::from_seconds(3.0, TimerMode::Repeating),
+            is_faded: false,
         },
     ));
 }
@@ -100,5 +125,33 @@ fn float_ghost(
     for (mut transform, anim) in query.iter_mut() {
         let offset = (time.elapsed_seconds() * 2.0).sin() * 10.0;
         transform.translation.y = anim.original_y + offset;
+    }
+}
+
+fn fade_ghost(
+    time: Res<Time>,
+    asset_server: Res<AssetServer>,
+    mut query: Query<(&mut Handle<Image>, &mut FadeEffect)>,
+) {
+    for (mut texture, mut fade) in query.iter_mut() {
+        fade.timer.tick(time.delta());
+        
+        if fade.timer.just_finished() {
+            fade.is_faded = !fade.is_faded;
+            *texture = if fade.is_faded {
+                asset_server.load("sprites/ghost_faded.png")
+            } else {
+                asset_server.load("sprites/ghost.png")
+            };
+        }
+    }
+}
+
+fn exit_system(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut app_exit_events: EventWriter<AppExit>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        app_exit_events.send(AppExit::Success);
     }
 }
