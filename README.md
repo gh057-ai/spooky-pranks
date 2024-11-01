@@ -9,18 +9,6 @@ A Halloween-themed game where you play as a ghost collecting candy from houses. 
 - Save/load game functionality
 - Balloon shooting minigame
 
-## Installation
-1. Download the latest release for your platform
-2. Extract the archive
-3. Run the executable
-
-## Controls
-- Mouse movement: Control ghost
-- Left/Right Click: Shoot (when progress bar is full)
-- F5: Save game
-- F9: Load game
-- ESC: Exit game
-
 ## Building from Source
 
 ```bash
@@ -29,6 +17,13 @@ cd spooky-pranks
 cargo build --release
 cargo run
 ```
+
+## Controls
+- Mouse movement: Control ghost
+- Left/Right Click: Shoot (when progress bar is full)
+- F5: Save game
+- F9: Load game
+- ESC: Exit game
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details
