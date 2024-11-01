@@ -44,6 +44,7 @@ fn main() {
                 update_house_display,
                 save_game,
                 load_game,
+                switch_house_lights,
             ),
         )
         .init_resource::<CursorPosition>()
@@ -154,6 +155,9 @@ struct HouseSprites {
     lit: Handle<Image>,
     dark: Handle<Image>,
 }
+
+#[derive(Component)]
+struct BalloonPumpkin;
 
 fn setup(
     mut commands: Commands,
@@ -344,41 +348,86 @@ fn spawn_houses(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    // Spawn multiple houses with different states and loot
-    let house_positions = [
-        (Vec2::new(300.0, 200.0), true),  // Light on
-        (Vec2::new(-300.0, 200.0), false), // Light off
-        (Vec2::new(0.0, -200.0), true),    // Light on
-    ];
+    // Grid configuration
+    let rows = 3;
+    let cols = 3;
+    let spacing = 300.0; // Space between houses
+    
+    // Calculate starting position for top-left house
+    // This centers the grid around (0,0)
+    let start_x = -((cols - 1) as f32 * spacing) / 2.0;
+    let start_y = -((rows - 1) as f32 * spacing) / 2.0;
 
-    for (pos, light_status) in house_positions {
-        commands.spawn((
-            SpriteBundle {
-                texture: asset_server.load(if light_status { 
-                    "sprites/houses/house_lit.png" 
-                } else { 
-                    "sprites/houses/house_dark.png" 
-                }),
-                transform: Transform::from_xyz(pos.x, pos.y, 0.0),
-                ..default()
-            },
-            House {
-                state: if light_status { HouseState::Lit } else { HouseState::Dark },
-                house_type: match rand::random::<f32>() {
-                    x if x < 0.2 => HouseType::First,
-                    x if x < 0.3 => HouseType::Second,
-                    _ => HouseType::Third,
+    // Spawn houses in a grid
+    for row in 0..rows {
+        for col in 0..cols {
+            // Skip the center position (for the pumpkin)
+            if row == 1 && col == 1 {
+                continue;
+            }
+
+            let x = start_x + (col as f32 * spacing);
+            let y = start_y + (row as f32 * spacing);
+            
+            let light_status = rand::random::<bool>();
+            let base_scale = if light_status { 0.7 } else { 0.5 };
+            let scale = base_scale + (rand::random::<f32>() * 0.1 - 0.05);
+            
+            commands.spawn((
+                SpriteBundle {
+                    texture: asset_server.load(if light_status { 
+                        "sprites/houses/house_lit.png" 
+                    } else { 
+                        "sprites/houses/house_dark.png" 
+                    }),
+                    transform: Transform::from_xyz(x, y, 0.0)
+                        .with_scale(Vec3::splat(scale)),
+                    ..default()
                 },
-                light_status,
-                loot_type: match rand::random::<f32>() {
-                    x if x < 0.2 => LootType::RareItem("Magic Crystal".to_string()),
-                    x if x < 0.3 => LootType::SpecialTreat("Homemade Cookies".to_string()),
-                    _ => LootType::Candy,
+                House {
+                    state: if light_status { HouseState::Lit } else { HouseState::Dark },
+                    house_type: match rand::random::<f32>() {
+                        x if x < 0.2 => HouseType::First,
+                        x if x < 0.3 => HouseType::Second,
+                        _ => HouseType::Third,
+                    },
+                    light_status,
+                    loot_type: match rand::random::<f32>() {
+                        x if x < 0.2 => LootType::RareItem("Magic Crystal".to_string()),
+                        x if x < 0.3 => LootType::SpecialTreat("Homemade Cookies".to_string()),
+                        _ => LootType::Candy,
+                    },
+                    interaction_timer: Timer::from_seconds(3.0, TimerMode::Once),
                 },
-                interaction_timer: Timer::from_seconds(3.0, TimerMode::Once),
-            },
-        ));
+            ));
+        }
     }
+
+    // Spawn pumpkin in the center
+    commands.spawn(
+        SpriteBundle {
+            texture: asset_server.load("sprites/pump_kin.png"),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0)
+                .with_scale(Vec3::splat(0.4)),
+            ..default()
+        },
+    );
+
+    // Spawn balloon pumpkin in the center
+    commands.spawn((
+        SpriteBundle {
+            texture: asset_server.load("sprites/balloon_pumpkin.png"),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0)
+                .with_scale(Vec3::splat(0.4)),
+            ..default()
+        },
+        BalloonPumpkin,
+        FloatingAnimation {
+            original_y: 0.0,
+            amplitude: 15.0,    // How far it floats up/down
+            frequency: 1.5,     // How fast it floats
+        },
+    ));
 }
 
 fn ghost_house_interaction(
@@ -517,6 +566,37 @@ fn load_game(
             if let Ok(loaded_inventory) = serde_json::from_str::<PlayerInventory>(&save_data) {
                 *inventory = loaded_inventory;
                 println!("Game loaded!");
+            }
+        }
+    }
+}
+
+// Add a new system for light switching
+fn switch_house_lights(
+    time: Res<Time>,
+    mut houses: Query<(&mut House, &mut Handle<Image>)>,
+    house_sprites: Res<HouseSprites>,
+) {
+    // Switch lights every few seconds
+    let switch_interval = 5.0; // Adjust this value to control frequency
+    let time_since_startup = time.elapsed_seconds();
+    
+    if time_since_startup % switch_interval < time.delta_seconds() {
+        // Randomly select houses to switch
+        for (mut house, mut sprite) in houses.iter_mut() {
+            if rand::random::<f32>() < 0.3 { // 30% chance to switch each house
+                house.light_status = !house.light_status;
+                house.state = if house.light_status { 
+                    HouseState::Lit 
+                } else { 
+                    HouseState::Dark 
+                };
+                
+                *sprite = if house.light_status {
+                    house_sprites.lit.clone()
+                } else {
+                    house_sprites.dark.clone()
+                };
             }
         }
     }
