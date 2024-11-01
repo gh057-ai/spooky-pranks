@@ -20,13 +20,9 @@ enum GameSet {
 #[derive(States, Debug, Clone, Eq, PartialEq, Hash, Default)]
 enum GameState {
     #[default]
-    Menu,
     Playing,
     Paused,
 }
-
-#[derive(Component)]
-struct MenuUI;
 
 // Update these type definitions
 type BulletQuery<'a> = Query<'a, 'static, (Entity, &'static mut Transform, &'static Bullet)>;
@@ -63,8 +59,6 @@ fn main() {
                 switch_house_lights,
                 update_score_text,
                 update_particles,
-                pause_system,
-                menu_system.run_if(in_state(GameState::Menu)),
                 ghost_house_interaction.run_if(in_state(GameState::Playing)),
                 candy_deposit_system,
                 animate_progress_particles,
@@ -77,7 +71,7 @@ fn main() {
         .init_resource::<CursorPosition>()
         .insert_resource(PlayerInventory {
             candies: 0,
-            rare_items: Vec::new(),
+            progress_percent: 0.0,
         })
         .add_systems(Startup, spawn_houses)
         .add_systems(
@@ -87,9 +81,6 @@ fn main() {
                 animate_floating_text,
             ),
         )
-        .init_state::<GameState>()
-        .insert_state(GameState::Menu)
-        .add_systems(OnEnter(GameState::Menu), setup_menu)
         .run();
 }
 
@@ -164,10 +155,10 @@ struct Collectable {
     value: u32,
 }
 
-#[derive(Resource, Serialize, Deserialize)]
+#[derive(Resource, Serialize, Deserialize, Clone)]
 struct PlayerInventory {
     candies: u32,
-    rare_items: Vec<LootType>,
+    progress_percent: f32,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -695,23 +686,45 @@ fn update_house_display(
 fn save_game(
     keyboard: Res<ButtonInput<KeyCode>>,
     inventory: Res<PlayerInventory>,
+    progress_bar_query: Query<&Style, With<ProgressBar>>,
 ) {
-    if keyboard.just_pressed(KeyCode::F5) {  // Save when F5 is pressed
-        let save_data = serde_json::to_string(&*inventory).unwrap();
+    if keyboard.just_pressed(KeyCode::F5) {
+        // Create a copy of inventory with current progress
+        let mut save_inventory = (*inventory).clone();
+        
+        // Update progress from progress bar
+        if let Ok(style) = progress_bar_query.get_single() {
+            if let Val::Percent(progress) = style.width {
+                save_inventory.progress_percent = progress;
+            }
+        }
+        
+        let save_data = serde_json::to_string(&save_inventory).unwrap();
         fs::write("save_game.json", save_data).unwrap();
-        println!("Game saved!");
+        println!("Game saved! Progress: {}%", save_inventory.progress_percent);
     }
 }
 
 fn load_game(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut inventory: ResMut<PlayerInventory>,
+    mut progress_bar_query: Query<(&mut Style, &mut BackgroundColor), With<ProgressBar>>,
 ) {
-    if keyboard.just_pressed(KeyCode::F9) {  // Load when F9 is pressed
+    if keyboard.just_pressed(KeyCode::F9) {
         if let Ok(save_data) = fs::read_to_string("save_game.json") {
             if let Ok(loaded_inventory) = serde_json::from_str::<PlayerInventory>(&save_data) {
+                // Update progress bar
+                if let Ok((mut style, mut background_color)) = progress_bar_query.get_single_mut() {
+                    style.width = Val::Percent(loaded_inventory.progress_percent);
+                    
+                    // Update color if progress is 100%
+                    if loaded_inventory.progress_percent >= 100.0 {
+                        *background_color = Color::srgb(1.0, 0.5, 0.0).into();
+                    }
+                }
+                
                 *inventory = loaded_inventory;
-                println!("Game loaded!");
+                println!("Game loaded! Progress: {}%", inventory.progress_percent);
             }
         }
     }
@@ -769,51 +782,6 @@ fn update_particles(
         } else {
             transform.translation.x += particle.velocity.x * time.delta_seconds();
             transform.translation.y += particle.velocity.y * time.delta_seconds();
-        }
-    }
-}
-
-fn setup_menu(mut commands: Commands) {
-    commands.spawn((
-        NodeBundle {
-            style: Style {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            ..default()
-        },
-        MenuUI,
-    ));
-}
-
-fn menu_system(
-    mut commands: Commands,
-    mut game_state: ResMut<NextState<GameState>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    menu_ui: Query<Entity, With<MenuUI>>,
-) {
-    if keyboard.just_pressed(KeyCode::Space) {
-        // Remove menu UI
-        for entity in menu_ui.iter() {
-            commands.entity(entity).despawn_recursive();
-        }
-        game_state.set(GameState::Playing);
-    }
-}
-
-fn pause_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut game_state: ResMut<NextState<GameState>>,
-    current_state: Res<State<GameState>>,
-) {
-    if keyboard.just_pressed(KeyCode::KeyP) {
-        match current_state.get() {
-            GameState::Playing => game_state.set(GameState::Paused),
-            GameState::Paused => game_state.set(GameState::Playing),
-            _ => (), // Do nothing if in menu state
         }
     }
 }
