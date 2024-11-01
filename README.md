@@ -27,6 +27,7 @@ A Halloween-themed game where you play as a ghost collecting candy from houses. 
 git clone https://github.com/gh057-ai/spooky-pranks.git
 cd spooky-pranks
 cargo build --release
+cargo run
 ```
 
 ## License
