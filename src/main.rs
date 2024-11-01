@@ -148,24 +148,10 @@ struct House {
     interaction_timer: Timer,
 }
 
-#[allow(dead_code)]
-#[derive(Component)]
-struct Collectable {
-    item_type: LootType,
-    value: u32,
-}
-
 #[derive(Resource, Serialize, Deserialize, Clone)]
 struct PlayerInventory {
     candies: u32,
     progress_percent: f32,
-}
-
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-enum LootType {
-    Candy,
-    RareItem(String),
-    SpecialTreat(String),
 }
 
 #[derive(Resource)]
