@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Spooky Pranks 👻
 
 A Halloween-themed game where you play as a ghost collecting candy from houses. Built with Rust using the Bevy game engine.
@@ -35,4 +34,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 =======
 # spooky-pranks
 A Halloween-themed game built with Rust and Bevy where you play as a ghost collecting candy from houses. Features dynamic lighting, particle effects, and a candy collection system.
->>>>>>> e7f3126bfde8b173749aae595f5a75844eed2211
+
