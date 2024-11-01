@@ -22,11 +22,12 @@ A Halloween-themed game where you play as a ghost collecting candy from houses. 
 - ESC: Exit game
 
 ## Building from Source
-'''bash
+
+```bash
 git clone https://github.com/gh057-ai/spooky-pranks.git
 cd spooky-pranks
 cargo build --release
-'''
+```
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details
